@@ -1,21 +1,47 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
+import aiohttp
+import asyncio
 
-@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
-class MyPlugin(Star):
+@register("ipv6_ddns_report", "Lynn", "查询用户的 IPv6 地址插件", "1.0.0")
+class IPv6Plugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
     
-    # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
-    @filter.command("helloworld")
-    async def helloworld(self, event: AstrMessageEvent):
-        '''这是一个 hello world 指令''' # 这是 handler 的描述，将会被解析方便用户了解插件内容。建议填写。
-        user_name = event.get_sender_name()
-        message_str = event.message_str # 用户发的纯文本消息字符串
-        message_chain = event.get_messages() # 用户所发的消息的消息链 # from astrbot.api.message_components import *
-        logger.info(message_chain)
-        yield event.plain_result(f"Hello, {user_name}, 你发了 {message_str}!") # 发送一条纯文本消息
+    @filter.command("ipv6地址")
+    async def print_ipv6(self, event: AstrMessageEvent):
+        '''这是一个查询IPV6的指令'''
+        # 先发送一条开始查询的消息
+        yield event.plain_result("开始查询您的 IPv6 地址...")
+        
+        ipv6_add = "未知"
+
+        retries = 0
+        max_retries = 3
+        
+        while retries < max_retries:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    # 使用ipify的IPv6 API
+                    async with session.get('https://api6.ipify.org?format=json', timeout=5) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if 'ip' in data and data['ip']:
+                                ipv6_add = data['ip']
+                                break
+            except Exception as e:
+                # 可以添加简单的错误分类处理
+                error_msg = str(e)
+                if "timeout" in error_msg.lower():
+                    yield event.plain_result(f"第{retries + 1}次查询超时，稍后重试...")
+                else:
+                    yield event.plain_result(f"第{retries + 1}次查询出错: {error_msg}")
+            retries += 1
+            if retries < max_retries:
+                await asyncio.sleep(1)
+        yield event.plain_result(f"您的IPv6地址是: {ipv6_add}")
+        
 
     async def terminate(self):
         '''可选择实现 terminate 函数，当插件被卸载/停用时会调用。'''
